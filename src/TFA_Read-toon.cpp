@@ -56,8 +56,10 @@ bool current_state_CLK = HIGH;
 
 int calcdirectory(const char *root_name);
 int createrootdir();
+String getparentdir(const String &path);
+String dividepath(String &path, String &filename);
 
-void refresh_screen_SCAN(String path, const int &start, const int &max);
+int refresh_screen_SCAN(String path, const int &start);
 void refresh_screen_FS(const int &selected, const int &n, const int &offset);
 
 void calcJpeg(const char *filename, const int &xpos, const int &ypos, const bool &print);
@@ -159,25 +161,40 @@ void loop()
         }
         else if (mode == SCAN) // handle scroll in scan mode
         {
-          int i = 0;
-          int y = 0;
-          String im_path;
-          while (true)
-          {
-            if (i + count >= max_count)
-              break;
-            im_path = directory + "/" + (i + count);
-            im_path = im_path + ".jpg";
-            calcJpeg(im_path.c_str(), 0, y, 0);
-            i++;
-            y += JpegDec.height;
-            if (y >= 320)
-              break;
+          // int i = 0;
+          // int y = 0;
+          // String im_path;
+          // while (true)
+          // {
+          //   if (i + count >= max_count)
+          //     break;
+          //   im_path = directory + "/" + (i + count);
+          //   im_path = im_path + ".jpg";
+          //   calcJpeg(im_path.c_str(), 0, y, 0);
+          //   i++;
+          //   y += JpegDec.height;
+          //   if (y >= 320)
+          //     break;
+          // }
+          if(refresh_screen_SCAN(directory + "/", count) >= max_count){
+            String filename;
+            dividepath(directory, filename);
+            Serial.print(F("directory: "));
+            Serial.print(directory);
+            Serial.print(F(" filename: "));
+            Serial.print(filename);
+            directory = directory + (filename.toInt() + 1);
+            Serial.print(F(" full: "));
+            Serial.println(directory);
+            do_it = true;
+            count = 0;
           }
-          refresh_screen_SCAN(directory + "/", count, i);
+          config = SD.open(directory + "/config", FILE_WRITE);
           config.seek(2);
           config.write((uint8_t)count);
-          config.flush();
+          config.seek(2);
+          // config.flush();
+          config.close();
         }
       }
     }
@@ -192,7 +209,7 @@ void loop()
       if (files[count].type)
       {
         do_it = true;
-        if (count == 0)
+        if (count == 0 && directory != "/")
         {
           uint8_t remove = 0;
           for (int i = directory.length() - 1; do_it; i--)
@@ -200,7 +217,7 @@ void loop()
             remove++;
             do_it = directory.charAt(i) != '/';
           }
-          directory = directory.substring(0, directory.length() - remove);
+          directory = directory.substring(0, maximum(directory.length() - remove, 1));
           do_it = true;
         }
         else
@@ -215,28 +232,6 @@ void loop()
     }
   }
   last_state_CLK = current_state_CLK;
-
-  /*
-        int i = 0;
-        int y = 0;
-        String path = String("/"), im_path;
-        path = path + chap;
-        path = path + '/';
-        while (true) {
-          im_path = path + (i + count);
-          im_path = im_path + ".jpg";
-          if (calcJpeg(im_path.c_str(), 0, y, 0)) {
-            max_count = count - 1;
-            break;
-          }
-          i++;
-          y += JpegDec.height;
-          if (y >= 320) break;
-        }
-        refresh_screen_SCAN(path, count, i);
-      }
-    }
-  }*/
 }
 
 String last_root;
@@ -260,7 +255,7 @@ int calcdirectory(const char *root_name)
   {
     File pre_config = SD.open(last_root + "/config", FILE_READ);
     char config_data[5];
-    config.readBytes(config_data, 5);
+    pre_config.readBytes(config_data, 5);
     if (config_data[0] == SCAN)
     {
       chap = (uint16_t)config_data[1];
@@ -269,7 +264,6 @@ int calcdirectory(const char *root_name)
       max_count = config_data[4];
       do_it = true;
       mode = SCAN;
-      config = SD.open(pre_config.path(), FILE_WRITE);
     }
     pre_config.close();
     root.close();
@@ -290,11 +284,60 @@ int calcdirectory(const char *root_name)
   return i;
 }
 
+/*
+ *Function:   createrootdir
+ *--------------------------
+ *Crée le dossier racine
+ *
+ *returns: 1
+ */
 int createrootdir()
 {
   files[0].name = String("..");
   files[0].type = true;
   return 1;
+}
+
+/*
+ *Function:   getparentdir
+ *--------------------------
+ *Récupère le répertoire parent d'un dossier
+ *
+ * path: chemin à évaluer
+ * 
+ * returns: le répertoire parent
+ */
+String getparentdir(const String &path)
+{
+  uint8_t remove;
+
+  for(remove = 0;path.charAt(path.length() - 1 - remove) != '/';remove++);
+
+  return path.substring(0, maximum(path.length() - remove, 1));
+}
+
+/*
+ *Function:   dividepath
+ *--------------------------
+ *Récupère le répertoire parent d'un dossier
+ *
+ * path: chemin à évaluer
+ * 
+ * filename: nom du fichier modifier par la fonction
+ * 
+ * returns: le répertoire parent
+ */
+String dividepath(String &path, String &filename)
+{
+  uint8_t remove;
+
+  for(remove = 0;path.charAt(path.length() - 1 - remove) != '/';remove++);
+
+  filename = path.substring(path.length() - remove, path.length());
+
+  path = path.substring(0, maximum(path.length() - remove, 1));
+
+  return path;
 }
 
 /*
@@ -310,20 +353,19 @@ int createrootdir()
  *
  *returns: void
  */
-void refresh_screen_SCAN(String path, const int &start, const int &stop)
+int refresh_screen_SCAN(String path, const int &start)
 {
   String im_path;
-  Serial.print(start);    // ↰
-  Serial.print(F(" | ")); // } Debug
-  Serial.println(stop);   // ↲
   int y = 0;
-  for (int i = 0; i < stop; i++)
+  int i;
+  for (i = 0; y < 320; i++)
   {
     im_path = path + (i + start);
     im_path = im_path + ".jpg";
     calcJpeg(im_path.c_str(), 0, y, 1);
     y += JpegDec.height;
   }
+  return i + start;
 }
 /*
  *Function:   refresh_screen_SCAN
