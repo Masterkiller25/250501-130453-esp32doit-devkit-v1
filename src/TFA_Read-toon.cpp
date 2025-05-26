@@ -32,10 +32,26 @@
 #define mosi 13
 #define cs 15
 
+#define DEBUG
+
 struct File_essantial
 {
   String name;
   bool type;
+};
+struct Timer
+{
+
+  uint32_t start_time;
+
+  void start_timer()
+  {
+    start_time = millis();
+  }
+  uint32_t get_timer()
+  {
+    return millis() - start_time;
+  }
 };
 
 uint max_count = -1;
@@ -49,8 +65,13 @@ uint8_t mode = FS;
 TFT_eSPI tft = TFT_eSPI();
 int count = 0;
 int encoder_value;
+Timer scroll;
+Timer click;
 bool last_state_CLK = HIGH;
 bool current_state_CLK = HIGH;
+
+uint8_t coos[16][2];
+uint8_t colors[0][3];
 
 // prototype
 
@@ -61,12 +82,10 @@ String dividepath(String &path, String &filename);
 
 int refresh_screen_SCAN(String path, const int &start);
 void refresh_screen_FS(const int &selected, const int &n, const int &offset);
+void refresh_screen_OPTION(const int &type, const int &selected);
 
 void calcJpeg(const char *filename, const int &xpos, const int &ypos, const bool &print);
 void jpegRender(const int &xpos, const int &ypos);
-
-void start_timer();
-uint32_t get_timer();
 
 void drawdir(const int &i);
 void drawfile(const int &i);
@@ -82,12 +101,17 @@ void setup()
   SPI.begin(sck, miso, mosi, cs);
   if (SD.begin(cs))
   {
+#ifdef DEBUG
     Serial.println(F("Cart SD Mount"));
   }
   else
   {
     Serial.println(F("Erroro SD"));
+#endif
   }
+  File configs = SD.open("/configs", FILE_READ);
+  configs.readBytes((char *)&coos, sizeof(coos));
+  configs.readBytes((char *)&colors, sizeof(colors));
 
   tft.init();
   tft.setRotation(0);
@@ -97,11 +121,17 @@ void setup()
   tft.setCursor(10, 10);
   tft.println(F("Initaliser"));
 
-  // if (!SD.exists("test.jpg")) tft.println("No test.jpg");
-  // if (!SD.exists("/test.jpg")) tft.println("No /test.jpg");
-  // if (!SD.exists("foo.txt")) tft.println("No foo.txt");               //Debug
-  // if (!SD.exists("/foo.txt")) tft.println("No /foo.txt");
-  start_timer();
+#ifdef DEBUG
+  if (!SD.exists("test.jpg"))
+    tft.println("No test.jpg");
+  if (!SD.exists("/test.jpg"))
+    tft.println("No /test.jpg");
+  if (!SD.exists("foo.txt"))
+    tft.println("No foo.txt");
+  if (!SD.exists("/foo.txt"))
+    tft.println("No /foo.txt");
+#endif
+  scroll.start_timer();
 
   delay(1000);
 
@@ -128,12 +158,13 @@ void loop()
     }
     else
     {
-      if (get_timer() < 300 || do_it) // let time before refresh but add to the counter
+      if (scroll.get_timer() < 300) // let time before refresh but add to the counter
       {
-        start_timer();
+        scroll.start_timer();
       }
       else
       {
+        // do_it = false;
         if (count >= max_count)
         {
           count = max_count - 1;
@@ -161,50 +192,44 @@ void loop()
         }
         else if (mode == SCAN) // handle scroll in scan mode
         {
-          // int i = 0;
-          // int y = 0;
-          // String im_path;
-          // while (true)
-          // {
-          //   if (i + count >= max_count)
-          //     break;
-          //   im_path = directory + "/" + (i + count);
-          //   im_path = im_path + ".jpg";
-          //   calcJpeg(im_path.c_str(), 0, y, 0);
-          //   i++;
-          //   y += JpegDec.height;
-          //   if (y >= 320)
-          //     break;
-          // }
-          if(refresh_screen_SCAN(directory + "/", count) >= max_count){
+          if (refresh_screen_SCAN(directory + "/", count) >= max_count)
+          {
             String filename;
             dividepath(directory, filename);
+            directory = directory + (filename.toInt() + 1);
+#ifdef DEBUG
             Serial.print(F("directory: "));
             Serial.print(directory);
             Serial.print(F(" filename: "));
             Serial.print(filename);
-            directory = directory + (filename.toInt() + 1);
             Serial.print(F(" full: "));
             Serial.println(directory);
+#endif
             do_it = true;
             count = 0;
           }
-          config = SD.open(directory + "/config", FILE_WRITE);
           config.seek(2);
           config.write((uint8_t)count);
-          config.seek(2);
-          // config.flush();
-          config.close();
+          config.flush();
         }
       }
     }
   }
 
   current_state_CLK = digitalRead(encoder_CLK_pin);
-  if (current_state_CLK == LOW && last_state_CLK == HIGH) // handle click
+  if (current_state_CLK == LOW && last_state_CLK == HIGH) // handle press
   {
-    delay(20);
-    if (digitalRead(encoder_CLK_pin) == LOW)
+#ifdef DEBUG
+    Serial.println("Encoder pressed");
+#endif
+    click.start_timer();
+  }
+  if (current_state_CLK == HIGH && last_state_CLK == LOW) // handle release
+  {
+#ifdef DEBUG
+    Serial.println(click.get_timer());
+#endif
+    if (click.get_timer() < 1000) // handle quick release
     {
       if (files[count].type)
       {
@@ -226,9 +251,14 @@ void loop()
             directory += "/";
           directory += files[count].name;
           count = 0;
+          if (calcdirectory(directory.c_str())) {
+            do_it = true;
+          }
         }
       }
-      Serial.println("Encoder pressed");
+    }
+    else // handle slow release
+    {
     }
   }
   last_state_CLK = current_state_CLK;
@@ -247,15 +277,20 @@ int last_i;
  */
 int calcdirectory(const char *root_name)
 {
+#ifdef DEBUG
+  Serial.print("[DEBUG] calcdirectory(");
+  Serial.print(root_name);
+  Serial.println(")");
+#endif
   if (String(root_name) == last_root)
     return last_i;
   last_root = String(root_name);
   File root = SD.open(root_name);
-  if (SD.exists(last_root + "/config"))
+  if (SD.exists(last_root + "/cfg_sc"))
   {
-    File pre_config = SD.open(last_root + "/config", FILE_READ);
+    config = SD.open(last_root + "/cfg_sc", "w+");
     char config_data[5];
-    pre_config.readBytes(config_data, 5);
+    config.readBytes(config_data, 5);
     if (config_data[0] == SCAN)
     {
       chap = (uint16_t)config_data[1];
@@ -265,7 +300,6 @@ int calcdirectory(const char *root_name)
       do_it = true;
       mode = SCAN;
     }
-    pre_config.close();
     root.close();
     return false;
   }
@@ -275,7 +309,9 @@ int calcdirectory(const char *root_name)
   {
     files[i].name = String(entry.name());
     files[i].type = entry.isDirectory();
+#ifdef DEBUG
     Serial.println(entry.path());
+#endif
     entry = root.openNextFile();
   }
   entry.close();
@@ -293,6 +329,9 @@ int calcdirectory(const char *root_name)
  */
 int createrootdir()
 {
+#ifdef DEBUG
+  Serial.println("[DEBUG] createrootdir()");
+#endif
   files[0].name = String("..");
   files[0].type = true;
   return 1;
@@ -304,14 +343,20 @@ int createrootdir()
  *Récupère le répertoire parent d'un dossier
  *
  * path: chemin à évaluer
- * 
+ *
  * returns: le répertoire parent
  */
 String getparentdir(const String &path)
 {
+#ifdef DEBUG
+  Serial.print("[DEBUG] getparentdir(");
+  Serial.print(path);
+  Serial.println(")");
+#endif
   uint8_t remove;
 
-  for(remove = 0;path.charAt(path.length() - 1 - remove) != '/';remove++);
+  for (remove = 0; path.charAt(path.length() - 1 - remove) != '/'; remove++)
+    ;
 
   return path.substring(0, maximum(path.length() - remove, 1));
 }
@@ -322,16 +367,24 @@ String getparentdir(const String &path)
  *Récupère le répertoire parent d'un dossier
  *
  * path: chemin à évaluer
- * 
+ *
  * filename: nom du fichier modifier par la fonction
- * 
+ *
  * returns: le répertoire parent
  */
 String dividepath(String &path, String &filename)
 {
+#ifdef DEBUG
+  Serial.print("[DEBUG] dividepath(");
+  Serial.print(path);
+  Serial.print(", ");
+  Serial.print(filename);
+  Serial.println(")");
+#endif
   uint8_t remove;
 
-  for(remove = 0;path.charAt(path.length() - 1 - remove) != '/';remove++);
+  for (remove = 0; path.charAt(path.length() - 1 - remove) != '/'; remove++)
+    ;
 
   filename = path.substring(path.length() - remove, path.length());
 
@@ -355,6 +408,13 @@ String dividepath(String &path, String &filename)
  */
 int refresh_screen_SCAN(String path, const int &start)
 {
+#ifdef DEBUG
+  Serial.print("[DEBUG] refresh_screen_SCAN(");
+  Serial.print(path);
+  Serial.print(", ");
+  Serial.print(start);
+  Serial.println(")");
+#endif
   String im_path;
   int y = 0;
   int i;
@@ -382,6 +442,15 @@ int refresh_screen_SCAN(String path, const int &start)
  */
 void refresh_screen_FS(const int &selected, const int &n, const int &offset)
 {
+#ifdef DEBUG
+  Serial.print("[DEBUG] refresh_screen_FS(");
+  Serial.print(selected);
+  Serial.print(", ");
+  Serial.print(n);
+  Serial.print(", ");
+  Serial.print(offset);
+  Serial.println(")");
+#endif
   tft.fillScreen(0);
   for (int i = 0; i < n; i++)
   {
@@ -395,16 +464,28 @@ void refresh_screen_FS(const int &selected, const int &n, const int &offset)
   }
   drawselect(n);
 }
-
-uint32_t start_time;
-
-void start_timer()
+/*
+ *Function:   refresh_screen_OPTION
+ *--------------------------
+ *Raffraichi l'écran ;mode:OPTION à l'aide de mes fonctions
+ *
+ *type: troi bit contenat les options afficher
+ *
+ *selected: index de l'option sélectionner
+ *
+ *returns: void
+ */
+void refresh_screen_OPTION(const int &type, const int &selected)
 {
-  start_time = millis();
-}
-uint32_t get_timer()
-{
-  return millis() - start_time;
+#ifdef DEBUG
+  Serial.print("[DEBUG] refresh_screen_OPTION(");
+  Serial.print(type);
+  Serial.print(", ");
+  Serial.print(selected);
+  Serial.println(")");
+#endif
+  // claer
+  //  tft.drawRect
 }
 
 //====================================================================================
@@ -412,23 +493,26 @@ uint32_t get_timer()
 //====================================================================================
 void calcJpeg(const char *filename, const int &xpos, const int &ypos, const bool &print)
 {
-
+#ifdef DEBUG
   Serial.println("===========================");
   Serial.print("Drawing file: ");
   Serial.println(filename);
   Serial.println("===========================");
+#endif
 
   // Open the named file (the Jpeg decoder library will close it after rendering image)
   // fs::File jpegFile = SPIFFS.open( filename, "r");    // File handle reference for SPIFFS
   File jpegFile = SD.open(filename, FILE_READ); // or, file handle reference for SD library
 
-  // ESP32 always seems to return 1 for jpegFile so this null trap does not work
+// ESP32 always seems to return 1 for jpegFile so this null trap does not work
+#ifdef DEBUG
   if (!jpegFile)
   {
-    Serial.print("ERROR: File \"");
+    Serial.print(F("ERROR: File \""));
     Serial.print(filename);
-    Serial.println("\" not found!");
+    Serial.println(F("\" not found!"));
   }
+#endif
 
   // Use one of the three following methods to initialise the decoder,
   // the filename can be a String or character array type:
@@ -448,7 +532,9 @@ void calcJpeg(const char *filename, const int &xpos, const int &ypos, const bool
   }
   else
   {
-    Serial.println("Jpeg file format not supported!");
+#ifdef DEBUG
+    Serial.println(F("Jpeg file format not supported!"));
+#endif
   }
 }
 
@@ -475,8 +561,10 @@ void jpegRender(const int &xpos, const int &ypos)
   int32_t win_w = mcu_w;
   int32_t win_h = mcu_h;
 
+#ifdef DEBUG
   // record the current time so we can measure how long it takes to draw an image
   uint32_t drawTime = millis();
+#endif
 
   // save the coordinate of the right and bottom edges to assist image cropping
   // to the screen size
@@ -526,6 +614,7 @@ void jpegRender(const int &xpos, const int &ypos)
       JpegDec.abort();
   }
 
+#ifdef DEBUG
   // calculate how long it took to draw the image
   drawTime = millis() - drawTime; // Calculate the time it took
 
@@ -534,6 +623,7 @@ void jpegRender(const int &xpos, const int &ypos)
   Serial.print(drawTime);
   Serial.println(" ms");
   Serial.println("=====================================");
+#endif
 }
 
 /*
@@ -547,8 +637,13 @@ void jpegRender(const int &xpos, const int &ypos)
  */
 void drawdir(const int &i)
 {
-  tft.fillRoundRect(10, 10 + i * 25, 17, 15, 3, tft.color565(200, 200, 50));
-  tft.fillRoundRect(10, 15 + i * 25, 19, 10, 3, tft.color565(200, 200, 50));
+#ifdef DEBUG
+  Serial.print("[DEBUG] drawdir(");
+  Serial.print(i);
+  Serial.println(")");
+#endif
+  tft.fillRoundRect(coos[0][0], coos[0][1] + i * 25, coos[1][0], coos[1][1], 3, tft.color565(200, 200, 50));
+  tft.fillRoundRect(coos[2][0], coos[2][1] + i * 25, coos[3][0], coos[3][1], 3, tft.color565(200, 200, 50));
 }
 /*
  *Function:   drawfile
@@ -561,8 +656,13 @@ void drawdir(const int &i)
  */
 void drawfile(const int &i)
 {
-  tft.fillRect(10, 9 + i * 25, 10, 17, TFT_WHITE);
-  tft.fillRect(10, 14 + i * 25, 15, 15, TFT_WHITE);
+#ifdef DEBUG
+  Serial.print("[DEBUG] drawfile(");
+  Serial.print(i);
+  Serial.println(")");
+#endif
+  tft.fillRect(coos[4][0], coos[4][1] + i * 25, coos[5][0], coos[5][1], TFT_WHITE);
+  tft.fillRect(coos[6][0], coos[6][1] + i * 25, coos[7][0], coos[7][1], TFT_WHITE);
   tft.fillTriangle(19, 9 + i * 25, 19, 14 + i * 25, 24, 14 + i * 25, TFT_WHITE);
 }
 
@@ -579,6 +679,13 @@ void drawfile(const int &i)
  */
 void writename(const int &i_screen, const int &i_file)
 {
+#ifdef DEBUG
+  Serial.print("[DEBUG] writename(");
+  Serial.print(i_screen);
+  Serial.print(", ");
+  Serial.print(i_file);
+  Serial.println(")");
+#endif
   tft.setCursor(40, 11 + i_screen * 25);
   if (files[i_file].name.length() > 14)
   {
@@ -603,6 +710,11 @@ void writename(const int &i_screen, const int &i_file)
  */
 void drawsepar(const int &i)
 {
+#ifdef DEBUG
+  Serial.print("[DEBUG] drawsepar(");
+  Serial.print(i);
+  Serial.println(")");
+#endif
   tft.drawFastHLine(5, 30 + i * 25, tft.width() - 10, TFT_WHITE);
 }
 
@@ -617,10 +729,15 @@ void drawsepar(const int &i)
  */
 void drawselect(const int &max)
 {
+#ifdef DEBUG
+  Serial.print("[DEBUG] drawselect(");
+  Serial.print(max);
+  Serial.println(")");
+#endif
   for (int i = 0; i < max; i++)
   {
     tft.drawRect(210, 8 + i * 25, 20, 20, TFT_WHITE);
-    tft.drawRect(211, 9 + i * 25, 18, 18, 0);
+    // tft.drawRect(211, 9 + i * 25, 18, 18, 0);
   }
 }
 /*
@@ -634,6 +751,11 @@ void drawselect(const int &max)
  */
 void drawselected(const int &i)
 {
+#ifdef DEBUG
+  Serial.print("[DEBUG] drawselected(");
+  Serial.print(i);
+  Serial.println(")");
+#endif
   tft.drawLine(215, 20 + i * 25, 219, 24 + i * 25, TFT_WHITE);
   tft.drawLine(219, 24 + i * 25, 224, 15 + i * 25, TFT_WHITE);
 }
