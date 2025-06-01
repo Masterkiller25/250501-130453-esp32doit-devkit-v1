@@ -2,10 +2,6 @@
 
 #include <stdarg.h>
 
-#include "Encoder_Polling.h" //include for encoder
-#include "File_essantial.h" //include for file essential
-#include "Graphics.h" //include for graphics
-
 // include for SD with spi
 #include <SPI.h>
 #include <SPIFFS.h>
@@ -13,8 +9,6 @@
 
 #define TFT_PARALLEL_8_BIT
 #include <TFT_eSPI.h> //include for tft screen
-
-#include <JPEGDecoder.h> //include for Decoding JPEG file
 
 // #include <String.h>
 
@@ -26,7 +20,7 @@
 #define encoder_CLK_pin 33
 
 #define SCAN 1
-#define FS 0
+#define FILE_SYSTEM 0
 #define OPTION 2
 
 #define sck 12
@@ -35,6 +29,10 @@
 #define cs 15
 
 #define DEBUG
+
+#include "Encoder_Polling.h" //include for encoder
+#include "File_essantial.h" //include for file essential
+#include "Graphics.h" //include for graphics
 
 struct Timer
 {
@@ -57,9 +55,9 @@ String directory = "/";
 File config;
 uint16_t chap = 1;
 bool do_it = true;
-uint8_t mode = FS;
+uint8_t mode = FILE_SYSTEM;
 
-TFT_eSPI tft = TFT_eSPI();
+// TFT_eSPI tft = TFT_eSPI();
 int count = 0;
 int encoder_value;
 Timer scroll;
@@ -81,9 +79,6 @@ int refresh_screen_SCAN(String path, const int &start);
 void refresh_screen_FS(const int &selected, const int &n, const int &offset);
 void refresh_screen_OPTION(const int &type, const int &selected);
 
-void calcJpeg(const char *filename, const int &xpos, const int &ypos, const bool &print);
-void jpegRender(const int &xpos, const int &ypos);
-
 void setup()
 {
   Serial.begin(115200);
@@ -103,29 +98,30 @@ void setup()
   configs.readBytes((char *)&coos, sizeof(coos));
   configs.readBytes((char *)&colors, sizeof(colors));
 
-  tft.init();
-  tft.setRotation(0);
-  tft.fillScreen(0);
-  tft.setTextSize(2);
-  tft.setTextColor(TFT_WHITE);
-  tft.setCursor(10, 10);
-  tft.println(F("Initaliser"));
+  configs.close();
+
+  begin(coos, colors, files);
+  test();
 
 #ifdef DEBUG
   if (!SD.exists("test.jpg"))
-    tft.println("No test.jpg");
+    println("No test.jpg");
   if (!SD.exists("/test.jpg"))
-    tft.println("No /test.jpg");
+    println("No /test.jpg");
   if (!SD.exists("foo.txt"))
-    tft.println("No foo.txt");
+    println("No foo.txt");
   if (!SD.exists("/foo.txt"))
-    tft.println("No /foo.txt");
+    println("No /foo.txt");
+
+  printflc(0x21B2);
+  printflc(0x21B3);
+  delay(4000);
 #endif
   scroll.start_timer();
 
   delay(1000);
 
-  tft.fillScreen(0);
+  clear_screen();
 
   pinMode(encoder_CLK_pin, INPUT_PULLUP);
   encoder_begin(encoder_A_pin, encoder_B_pin);
@@ -159,7 +155,7 @@ void loop()
         {
           count = max_count - 1;
         }
-        if (mode == FS && calcdirectory(directory.c_str())) // handle scroll in file system mode
+        if (mode == FILE_SYSTEM && calcdirectory(directory.c_str())) // handle scroll in file system mode
         {
           max_count = calcdirectory(directory.c_str());
 
@@ -388,11 +384,9 @@ String dividepath(String &path, String &filename)
  *--------------------------
  *Raffraichi l'écran ;mode:SCAN à l'aide de la librairies Jpegdec
  *
- *path: Répèretoire parent des image a afficher
+ *path: Répèretoire parent des image à afficher
  *
  *start: index de la première image
- *
- *max: index de la dernière image
  *
  *returns: void
  */
@@ -412,13 +406,12 @@ int refresh_screen_SCAN(String path, const int &start)
   {
     im_path = path + (i + start);
     im_path = im_path + ".jpg";
-    calcJpeg(im_path.c_str(), 0, y, 1);
-    y += JpegDec.height;
+    y += calcJpeg(im_path.c_str(), 0, y, 1);
   }
   return i + start;
 }
 /*
- *Function:   refresh_screen_SCAN
+ *Function:   refresh_screen_FS
  *--------------------------
  *Raffraichi l'écran ;mode:FS à l'aide de mes fonctions
  *
@@ -441,7 +434,7 @@ void refresh_screen_FS(const int &selected, const int &n, const int &offset)
   Serial.print(offset);
   Serial.println(")");
 #endif
-  tft.fillScreen(0);
+  clear_screen();
   for (int i = 0; i < n; i++)
   {
     if (files[i + offset].type)
@@ -478,140 +471,3 @@ void refresh_screen_OPTION(const int &type, const int &selected)
   //  tft.drawRect
 }
 
-//====================================================================================
-//   Opens the image file and prime the Jpeg decoder
-//====================================================================================
-void calcJpeg(const char *filename, const int &xpos, const int &ypos, const bool &print)
-{
-#ifdef DEBUG
-  Serial.println("===========================");
-  Serial.print("Drawing file: ");
-  Serial.println(filename);
-  Serial.println("===========================");
-#endif
-
-  // Open the named file (the Jpeg decoder library will close it after rendering image)
-  // fs::File jpegFile = SPIFFS.open( filename, "r");    // File handle reference for SPIFFS
-  File jpegFile = SD.open(filename, FILE_READ); // or, file handle reference for SD library
-
-// ESP32 always seems to return 1 for jpegFile so this null trap does not work
-#ifdef DEBUG
-  if (!jpegFile)
-  {
-    Serial.print(F("ERROR: File \""));
-    Serial.print(filename);
-    Serial.println(F("\" not found!"));
-  }
-#endif
-
-  // Use one of the three following methods to initialise the decoder,
-  // the filename can be a String or character array type:
-
-  // boolean decoded = JpegDec.decodeFsFile(jpegFile); // Pass a SPIFFS file handle to the decoder,
-  boolean decoded = JpegDec.decodeSdFile(jpegFile); // or pass the SD file handle to the decoder,
-  // boolean decoded = JpegDec.decodeFsFile(filename);  // or pass the filename (leading / distinguishes SPIFFS files)
-
-  if (decoded)
-  {
-    // print information about the image to the serial port
-    // jpegInfo();
-
-    // render the image onto the screen at given coordinates
-    if (print)
-      jpegRender(xpos, ypos);
-  }
-  else
-  {
-#ifdef DEBUG
-    Serial.println(F("Jpeg file format not supported!"));
-#endif
-  }
-}
-
-//====================================================================================
-//   Decode and render the Jpeg image onto the TFT screen
-//====================================================================================
-void jpegRender(const int &xpos, const int &ypos)
-{
-
-  // retrieve infomration about the image
-  uint16_t *pImg;
-  int16_t mcu_w = JpegDec.MCUWidth;
-  int16_t mcu_h = JpegDec.MCUHeight;
-  int32_t max_x = JpegDec.width;
-  int32_t max_y = JpegDec.height;
-
-  // Jpeg images are draw as a set of image block (tiles) called Minimum Coding Units (MCUs)
-  // Typically these MCUs are 16x16 pixel blocks
-  // Determine the width and height of the right and bottom edge image blocks
-  int32_t min_w = minimum(mcu_w, max_x % mcu_w);
-  int32_t min_h = minimum(mcu_h, max_y % mcu_h);
-
-  // save the current image block size
-  int32_t win_w = mcu_w;
-  int32_t win_h = mcu_h;
-
-#ifdef DEBUG
-  // record the current time so we can measure how long it takes to draw an image
-  uint32_t drawTime = millis();
-#endif
-
-  // save the coordinate of the right and bottom edges to assist image cropping
-  // to the screen size
-  max_x += xpos;
-  max_y += ypos;
-
-  // read each MCU block until there are no more
-  while (JpegDec.readSwappedBytes())
-  { // Swapped byte order read
-
-    // save a pointer to the image block
-    pImg = JpegDec.pImage;
-
-    // calculate where the image block should be drawn on the screen
-    int mcu_x = JpegDec.MCUx * mcu_w + xpos; // Calculate coordinates of top left corner of current MCU
-    int mcu_y = JpegDec.MCUy * mcu_h + ypos;
-
-    // check if the image block size needs to be changed for the right edge
-    if (mcu_x + mcu_w <= max_x)
-      win_w = mcu_w;
-    else
-      win_w = min_w;
-
-    // check if the image block size needs to be changed for the bottom edge
-    if (mcu_y + mcu_h <= max_y)
-      win_h = mcu_h;
-    else
-      win_h = min_h;
-
-    // copy pixels into a contiguous block
-    if (win_w != mcu_w)
-    {
-      for (int h = 1; h < win_h - 1; h++)
-      {
-        memcpy(pImg + h * win_w, pImg + (h + 1) * mcu_w, win_w << 1);
-      }
-    }
-
-    // draw image MCU block only if it will fit on the screen
-    if (mcu_x < tft.width() && mcu_y < tft.height())
-    {
-      // Now push the image block to the screen
-      tft.pushImage(mcu_x, mcu_y, win_w, win_h, pImg);
-    }
-
-    else if ((mcu_y + win_h) >= tft.height())
-      JpegDec.abort();
-  }
-
-#ifdef DEBUG
-  // calculate how long it took to draw the image
-  drawTime = millis() - drawTime; // Calculate the time it took
-
-  // print the results to the serial port
-  Serial.print("Total render time was    : ");
-  Serial.print(drawTime);
-  Serial.println(" ms");
-  Serial.println("=====================================");
-#endif
-}
