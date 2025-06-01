@@ -31,8 +31,8 @@
 #define DEBUG
 
 #include "Encoder_Polling.h" //include for encoder
-#include "File_essantial.h" //include for file essential
-#include "Graphics.h" //include for graphics
+#include "File_essantial.h"  //include for file essential
+#include "Graphics.h"        //include for graphics
 
 struct Timer
 {
@@ -56,6 +56,7 @@ File config;
 uint16_t chap = 1;
 bool do_it = true;
 uint8_t mode = FILE_SYSTEM;
+uint8_t OPTION_mode = 0x0;
 
 // TFT_eSPI tft = TFT_eSPI();
 int count = 0;
@@ -74,6 +75,7 @@ int calcdirectory(const char *root_name);
 int createrootdir();
 String getparentdir(const String &path);
 String dividepath(String &path, String &filename);
+bool canopen(const String &filename);
 
 int refresh_screen_SCAN(String path, const int &start);
 void refresh_screen_FS(const int &selected, const int &n, const int &offset);
@@ -217,30 +219,51 @@ void loop()
 #endif
     if (click.get_timer() < 1000) // handle quick release
     {
-      if (files[count].type)
+      if (mode = FILE_SYSTEM)
       {
-        do_it = true;
-        if (count == 0 && directory != "/")
+        if (files[count].type)
         {
-          uint8_t remove = 0;
-          for (int i = directory.length() - 1; do_it; i--)
-          {
-            remove++;
-            do_it = directory.charAt(i) != '/';
-          }
-          directory = directory.substring(0, maximum(directory.length() - remove, 1));
           do_it = true;
+          if (count == 0 && directory != "/")
+          {
+            uint8_t remove = 0;
+            for (int i = directory.length() - 1; do_it; i--)
+            {
+              remove++;
+              do_it = directory.charAt(i) != '/';
+            }
+            directory = directory.substring(0, maximum(directory.length() - remove, 1));
+            do_it = true;
+          }
+          else
+          {
+            if (!directory.endsWith("/"))
+              directory += "/";
+            directory += files[count].name;
+            count = 0;
+            if (calcdirectory(directory.c_str()))
+            {
+              do_it = true;
+            }
+          }
         }
         else
         {
-          if (!directory.endsWith("/"))
-            directory += "/";
-          directory += files[count].name;
+          OPTION_mode = 0x0;
+          OPTION_mode |= ((count != 0)               << 0);
+          OPTION_mode |= ((canopen(directory))       << 1);
+          OPTION_mode |= (((count - 1) != max_count) << 2);
+#ifdef DEBUG
+          Serial.print("OPTION_mode");
+          Serial.println(OPTION_mode);
+#endif
           count = 0;
-          if (calcdirectory(directory.c_str())) {
-            do_it = true;
-          }
+          mode = OPTION;
         }
+      }
+      if (mode = OPTION)
+      {
+        refresh_screen_OPTION(OPTION_mode, count);
       }
     }
     else // handle slow release
@@ -380,6 +403,19 @@ String dividepath(String &path, String &filename)
 }
 
 /*
+ *Function:   canopen
+ *--------------------------
+ *Détirmine si le fichier est ouverable
+ *
+ * filename: chemin d'accés incluant le nom de fichier
+ *
+ * returns: ouverbable ou nom
+ */
+bool canopen(const String &filename)
+{
+  return filename.endsWith(".txt");
+}
+/*
  *Function:   refresh_screen_SCAN
  *--------------------------
  *Raffraichi l'écran ;mode:SCAN à l'aide de la librairies Jpegdec
@@ -470,4 +506,3 @@ void refresh_screen_OPTION(const int &type, const int &selected)
   // claer
   //  tft.drawRect
 }
-
