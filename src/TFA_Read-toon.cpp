@@ -115,13 +115,13 @@ void setup()
   if (!SD.exists("/foo.txt"))
     println("No /foo.txt");
 
-  printflc(0x21B2);
-  printflc(0x21B3);
+  printflc('↲');
+  printflc('↳');
   delay(4000);
 #endif
-  scroll.start_timer();
-
   delay(1000);
+
+  scroll.start_timer();
 
   clear_screen();
 
@@ -219,12 +219,12 @@ void loop()
 #endif
     if (click.get_timer() < 1000) // handle quick release
     {
-      if (mode = FILE_SYSTEM)
+      if (mode == FILE_SYSTEM)
       {
         if (files[count].type)
         {
           do_it = true;
-          if (count == 0 && directory != "/")
+          if (count == 0 && directory != "/") // parent directory
           {
             uint8_t remove = 0;
             for (int i = directory.length() - 1; do_it; i--)
@@ -250,8 +250,8 @@ void loop()
         else
         {
           OPTION_mode = 0x0;
-          OPTION_mode |= ((count != 0)               << 0);
-          OPTION_mode |= ((canopen(directory))       << 1);
+          OPTION_mode |= ((count != 0) << 0);
+          OPTION_mode |= ((canopen(directory)) << 1);
           OPTION_mode |= (((count - 1) != max_count) << 2);
 #ifdef DEBUG
           Serial.print("OPTION_mode");
@@ -261,7 +261,7 @@ void loop()
           mode = OPTION;
         }
       }
-      if (mode = OPTION)
+      if (mode == OPTION)
       {
         refresh_screen_OPTION(OPTION_mode, count);
       }
