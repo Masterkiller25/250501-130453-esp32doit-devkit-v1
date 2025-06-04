@@ -9,22 +9,22 @@
 
 #define DEBUG
 
-PROGMEM const unsigned char chr_flc_E282B0[16] = // 1 unsigned char per row
+PROGMEM const unsigned char chr_flc_E286B0[16] = // 1 unsigned char per row
     {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x60, 0xf8, 0x68, 0x28, 0x08, // row 1 - 11
         0x08, 0x08, 0x08, 0x00, 0x00                                      // row 12 - 16
 };
-PROGMEM const unsigned char chr_flc_E282B1[16] = // 1 unsigned char per row
+PROGMEM const unsigned char chr_flc_E286B1[16] = // 1 unsigned char per row
     {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x06, 0x1f, 0x16, 0x14, 0x10, // row 1 - 11
         0x10, 0x10, 0x10, 0x00, 0x00                                      // row 12 - 16
 };
-PROGMEM const unsigned char chr_flc_E282B2[16] = // 1 unsigned char per row
+PROGMEM const unsigned char chr_flc_E286B2[16] = // 1 unsigned char per row
     {
         0x00, 0x00, 0x08, 0x08, 0x08, 0x08, 0x28, 0x68, 0xf8, 0x60, 0x20, // row 1 - 11
         0x00, 0x00, 0x00, 0x00, 0x00                                      // row 12 - 16
 };
-PROGMEM const unsigned char chr_flc_E282B3[16] = // 1 unsigned char per row
+PROGMEM const unsigned char chr_flc_E286B3[16] = // 1 unsigned char per row
     {
         0x00, 0x00, 0x10, 0x10, 0x10, 0x10, 0x14, 0x16, 0x1f, 0x06, 0x04, // row 1 - 11
         0x00, 0x00, 0x00, 0x00, 0x00                                      // row 12 - 16
@@ -32,7 +32,7 @@ PROGMEM const unsigned char chr_flc_E282B3[16] = // 1 unsigned char per row
 
 PROGMEM const unsigned char *const chrtbl_flc[4] =
     {
-        chr_flc_E282B0, chr_flc_E282B1, chr_flc_E282B2, chr_flc_E282B3};
+        chr_flc_E286B0, chr_flc_E286B1, chr_flc_E286B2, chr_flc_E286B3};
 
 // Graphics graphics = Graphics();
 // TFT_eSPI &tft = graphics.tft;
@@ -240,7 +240,7 @@ void drawselect(const int &max)
   for (int i = 0; i < max; i++)
   {
     tft.drawRect(210, 8 + i * 25, 20, 20, TFT_WHITE);
-    // tft.drawRect(211, 9 + i * 25, 18, 18, 0);
+    tft.drawRect(211, 9 + i * 25, 18, 18, 0);
   }
 }
 /*
@@ -282,12 +282,12 @@ void printflc(const int &c)
   Serial.print(c);
   Serial.println(")");
 #endif
-  if (c < 0xE282B0 || c > 0xE282B3)
+  if (c < 0xE286B0 || c > 0xE286B3)
   {
     Serial.println(F("ERROR: printflc: Invalid character code"));
     return;
   }
-  const unsigned char *chr = chrtbl_flc[c - 0xE282B0];
+  const unsigned char *chr = chrtbl_flc[c - 0xE286B0];
   int16_t x = tft.getCursorX();
   int16_t y = tft.getCursorY();
   uint8_t s = tft.textsize;
