@@ -9,22 +9,22 @@
 
 #define DEBUG
 
-PROGMEM const unsigned char chr_flc_21B0[16] = // 1 unsigned char per row
+PROGMEM const unsigned char chr_flc_E282B0[16] = // 1 unsigned char per row
     {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x60, 0xf8, 0x68, 0x28, 0x08, // row 1 - 11
         0x08, 0x08, 0x08, 0x00, 0x00                                      // row 12 - 16
 };
-PROGMEM const unsigned char chr_flc_21B1[16] = // 1 unsigned char per row
+PROGMEM const unsigned char chr_flc_E282B1[16] = // 1 unsigned char per row
     {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x06, 0x1f, 0x16, 0x14, 0x10, // row 1 - 11
         0x10, 0x10, 0x10, 0x00, 0x00                                      // row 12 - 16
 };
-PROGMEM const unsigned char chr_flc_21B2[16] = // 1 unsigned char per row
+PROGMEM const unsigned char chr_flc_E282B2[16] = // 1 unsigned char per row
     {
         0x00, 0x00, 0x08, 0x08, 0x08, 0x08, 0x28, 0x68, 0xf8, 0x60, 0x20, // row 1 - 11
         0x00, 0x00, 0x00, 0x00, 0x00                                      // row 12 - 16
 };
-PROGMEM const unsigned char chr_flc_21B3[16] = // 1 unsigned char per row
+PROGMEM const unsigned char chr_flc_E282B3[16] = // 1 unsigned char per row
     {
         0x00, 0x00, 0x10, 0x10, 0x10, 0x10, 0x14, 0x16, 0x1f, 0x06, 0x04, // row 1 - 11
         0x00, 0x00, 0x00, 0x00, 0x00                                      // row 12 - 16
@@ -32,7 +32,7 @@ PROGMEM const unsigned char chr_flc_21B3[16] = // 1 unsigned char per row
 
 PROGMEM const unsigned char *const chrtbl_flc[4] =
     {
-        chr_flc_21B0, chr_flc_21B1, chr_flc_21B2, chr_flc_21B3};
+        chr_flc_E282B0, chr_flc_E282B1, chr_flc_E282B2, chr_flc_E282B3};
 
 // Graphics graphics = Graphics();
 // TFT_eSPI &tft = graphics.tft;
@@ -282,25 +282,25 @@ void printflc(const int &c)
   Serial.print(c);
   Serial.println(")");
 #endif
-  if (c < 0x21B0 || c > 0x21B3)
+  if (c < 0xE282B0 || c > 0xE282B3)
   {
     Serial.println(F("ERROR: printflc: Invalid character code"));
     return;
   }
-  const unsigned char *chr = chrtbl_flc[c - 0x21B0];
-  int x = tft.getCursorX();
-  int y = tft.getCursorY();
-  int s = tft.textsize;
+  const unsigned char *chr = chrtbl_flc[c - 0xE282B0];
+  int16_t x = tft.getCursorX();
+  int16_t y = tft.getCursorY();
+  uint8_t s = tft.textsize;
   for (int row = 0; row < 16; row++)
   {
     unsigned char data = pgm_read_byte(chr + row);
-    for (int col = 0; col < 8; col++)
+    for (uint8_t col = 0; col < 8; col++)
     {
       if (data & (0x80 >> col))
       {
-        for (int8_t i = 0; i < s; i++)
+        for (uint8_t i = 0; i < s; i++)
         {
-          for (int8_t j = 0; j < s; j++)
+          for (uint8_t j = 0; j < s; j++)
           {
             tft.drawPixel(x + col * s + i, y + row * s + j, TFT_WHITE);
           }
