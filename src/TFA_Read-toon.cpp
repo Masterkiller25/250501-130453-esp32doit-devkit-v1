@@ -56,7 +56,7 @@ File config;
 uint16_t chap = 1;
 bool do_it = true;
 uint8_t mode = FILE_SYSTEM;
-uint8_t OPTION_mode = 0x0;
+uint16_t OPTION_mode = 0x0;
 
 // TFT_eSPI tft = TFT_eSPI();
 int count = 0;
@@ -76,10 +76,11 @@ int createrootdir();
 String getparentdir(const String &path);
 String dividepath(String &path, String &filename);
 bool canopen(const String &filename);
+void open_file(const int &i);
 
 int refresh_screen_SCAN(String path, const int &start);
 void refresh_screen_FS(const int &selected, const int &n, const int &offset);
-void refresh_screen_OPTION(const int &type, const int &selected);
+void refresh_screen_OPTION(const int &type, const int16_t &selected);
 
 void setup()
 {
@@ -103,9 +104,9 @@ void setup()
   configs.close();
 
   begin(coos, colors, files);
-  test();
 
 #ifdef DEBUG
+  test();
   if (!SD.exists("test.jpg"))
     println("No test.jpg");
   if (!SD.exists("/test.jpg"))
@@ -115,8 +116,8 @@ void setup()
   if (!SD.exists("/foo.txt"))
     println("No /foo.txt");
 
-  printflc(0x21B2);
-  printflc(0x21B3);
+  printflc('↲');
+  printflc('↳');
   delay(4000);
 #endif
   scroll.start_timer();
@@ -127,24 +128,20 @@ void setup()
 
   pinMode(encoder_CLK_pin, INPUT_PULLUP);
   encoder_begin(encoder_A_pin, encoder_B_pin);
-
-  // drawJpeg("/test.jpg", tft.width() / 2 + 15, 0, 0);
-  // encoder_value = 1;
 }
 
 void loop()
 {
-
-  encoder_value = encoder_data(); // return -1, 0 or 1
-  if (encoder_value || do_it)     // handle scroll //do_it → to fake scroll
+  if (do_it)
   {
     do_it = false;
+    goto Fake_scroll; // go to the scroll handler
+  }
+
+  encoder_value = encoder_data(); // return -1, 0 or 1
+  if (encoder_value)              // handle scroll
+  {
     count -= encoder_value;
-    if (count < 0)
-    {
-      count = 0;
-    }
-    else
     {
       if (scroll.get_timer() < 300) // let time before refresh but add to the counter
       {
@@ -152,31 +149,32 @@ void loop()
       }
       else
       {
-        // do_it = false;
+      Fake_scroll:
+        if (count < 0)
+        {
+          count = 0;
+        }
         if (count >= max_count)
         {
           count = max_count - 1;
         }
-        if (mode == FILE_SYSTEM && calcdirectory(directory.c_str())) // handle scroll in file system mode
+        if (mode == FILE_SYSTEM && calcdirectory(directory.c_str()) != -1) // handle scroll in file system mode
         {
           max_count = calcdirectory(directory.c_str());
 
-          if (max_count <= 12)
+          if (max_count <= 12) // moins de 12 fichiers
           {
             refresh_screen_FS(count, max_count, 0);
+            goto Endloop;
           }
-          else
+          clear_screen();
+          if (max_count - count < 12) // plus de 12 fichiers mais on est en bas
           {
-
-            if (max_count - count < 12)
-            {
-              refresh_screen_FS(12 - max_count + count, 12, max_count - 12);
-            }
-            else
-            {
-              refresh_screen_FS(0, 12, count);
-            }
+            refresh_screen_FS(12 - max_count + count, 12, max_count - 12);
+            goto Endloop;
           }
+          refresh_screen_FS(0, 12, count); // plus de 12 fichiers et on est en haut/milieu
+          goto Endloop;
         }
         else if (mode == SCAN) // handle scroll in scan mode
         {
@@ -193,12 +191,18 @@ void loop()
             Serial.print(F(" full: "));
             Serial.println(directory);
 #endif
-            do_it = true;
             count = 0;
+            goto Fake_scroll;
           }
           config.seek(2);
           config.write((uint8_t)count);
+          config.write((uint8_t)0);
+          config.write((uint8_t)max_count);
           config.flush();
+        }
+        else if (mode == OPTION) // handle scroll in option mode
+        {
+          refresh_screen_OPTION(OPTION_mode, count);
         }
       }
     }
@@ -219,70 +223,87 @@ void loop()
 #endif
     if (click.get_timer() < 1000) // handle quick release
     {
-      if (mode = FILE_SYSTEM)
+      if (mode == FILE_SYSTEM)
       {
-        if (files[count].type)
+        open_file(count);
+        goto Fake_scroll;
+      }
+      if (mode == SCAN)
+      {
+        OPTION_mode = 0x0;
+        OPTION_mode |= ((false) << 0);
+        OPTION_mode |= ((false) << 1);
+        OPTION_mode |= ((true) << 2);
+        OPTION_mode |= ((mode) << 3);
+        OPTION_mode |= ((count) << 5);
+#ifdef DEBUG
+        Serial.print("OPTION_mode");
+        Serial.println(OPTION_mode);
+#endif
+        count = 0;
+        max_count = 5;
+        mode = OPTION;
+        goto Fake_scroll;
+      }
+      if (mode == OPTION)
+      {
+        if (count == 0 && (OPTION_mode & (1 << 0)) >> 0)
         {
-          do_it = true;
-          if (count == 0 && directory != "/")
-          {
-            uint8_t remove = 0;
-            for (int i = directory.length() - 1; do_it; i--)
-            {
-              remove++;
-              do_it = directory.charAt(i) != '/';
-            }
-            directory = directory.substring(0, maximum(directory.length() - remove, 1));
-            do_it = true;
-          }
-          else
-          {
-            if (!directory.endsWith("/"))
-              directory += "/";
-            directory += files[count].name;
-            count = 0;
-            if (calcdirectory(directory.c_str()))
-            {
-              do_it = true;
-            }
-          }
-        }
-        else
-        {
+          count = OPTION_mode >> 5;
           OPTION_mode = 0x0;
-          OPTION_mode |= ((count != 0)               << 0);
-          OPTION_mode |= ((canopen(directory))       << 1);
+          OPTION_mode |= ((count != 0) << 0);
+          OPTION_mode |= ((canopen(directory)) << 1);
           OPTION_mode |= (((count - 1) != max_count) << 2);
+          OPTION_mode |= ((mode) << 3);
+          OPTION_mode |= ((count) << 5);
 #ifdef DEBUG
           Serial.print("OPTION_mode");
           Serial.println(OPTION_mode);
 #endif
           count = 0;
+          max_count = 5;
           mode = OPTION;
+          goto Fake_scroll;
         }
-      }
-      if (mode = OPTION)
-      {
-        refresh_screen_OPTION(OPTION_mode, count);
+
+        if (count == 1) // OPEN
+        {
+          open_file(OPTION_mode >> 5);
+          goto Fake_scroll;
+        }
       }
     }
     else // handle slow release
     {
+      if (mode == FILE_SYSTEM)
+      {
+        OPTION_mode = 0x0;
+        OPTION_mode |= ((count != 0) << 0);
+        OPTION_mode |= ((canopen(directory)) << 1);
+        OPTION_mode |= (((count - 1) != max_count) << 2);
+        OPTION_mode |= ((mode) << 3);
+        OPTION_mode |= ((count) << 5);
+#ifdef DEBUG
+        Serial.print("OPTION_mode");
+        Serial.println(OPTION_mode);
+#endif
+        count = 0;
+        max_count = 5;
+        mode = OPTION;
+        goto Fake_scroll;
+      }
     }
   }
+Endloop:
   last_state_CLK = current_state_CLK;
 }
-
 String last_root;
 int last_i;
-/*
- *Function:   calcdirectory
- *--------------------------
- *Détermine les dossier et sous dossier d'un dossier donner en entrer et en stock l'éssentielle
+/**
+ * @brief Détermine les dossiers et sous-dossiers d'un dossier donné en entrée et en stocke l'essentiel.
  *
- *root_name: Nom de doosier(commence par "/")
- *
- *returns: le nombre de fichier/dossier présent. Si le dossier est configurer renvoie faux
+ * @param root_name Nom du dossier (commence par "/")
+ * @return int Le nombre de fichiers/dossiers présents. Si le dossier est configuré, renvoie -1.
  */
 int calcdirectory(const char *root_name)
 {
@@ -310,7 +331,7 @@ int calcdirectory(const char *root_name)
       mode = SCAN;
     }
     root.close();
-    return false;
+    return -1;
   }
   File entry = root.openNextFile();
   int i;
@@ -329,12 +350,10 @@ int calcdirectory(const char *root_name)
   return i;
 }
 
-/*
- *Function:   createrootdir
- *--------------------------
- *Crée le dossier racine
+/**
+ * @brief Crée le dossier parent(..).
  *
- *returns: 1
+ * @return int 1
  */
 int createrootdir()
 {
@@ -346,14 +365,11 @@ int createrootdir()
   return 1;
 }
 
-/*
- *Function:   getparentdir
- *--------------------------
- *Récupère le répertoire parent d'un dossier
+/**
+ * @brief Récupère le répertoire parent d'un dossier.
  *
- * path: chemin à évaluer
- *
- * returns: le répertoire parent
+ * @param path Chemin à évaluer
+ * @return String Le répertoire parent
  */
 String getparentdir(const String &path)
 {
@@ -370,16 +386,12 @@ String getparentdir(const String &path)
   return path.substring(0, maximum(path.length() - remove, 1));
 }
 
-/*
- *Function:   dividepath
- *--------------------------
- *Récupère le répertoire parent d'un dossier
+/**
+ * @brief Récupère le répertoire parent d'un dossier et extrait le nom du fichier.
  *
- * path: chemin à évaluer
- *
- * filename: nom du fichier modifier par la fonction
- *
- * returns: le répertoire parent
+ * @param[in, out] path Chemin à évaluer (sera modifié)
+ * @param[out] filename Nom du fichier modifié par la fonction
+ * @return String Le répertoire parent
  */
 String dividepath(String &path, String &filename)
 {
@@ -402,29 +414,22 @@ String dividepath(String &path, String &filename)
   return path;
 }
 
-/*
- *Function:   canopen
- *--------------------------
- *Détirmine si le fichier est ouverable
+/**
+ * @brief Détermine si le fichier est ouvrable.
  *
- * filename: chemin d'accés incluant le nom de fichier
- *
- * returns: ouverbable ou nom
+ * @param filename Chemin d'accès incluant le nom de fichier
+ * @return bool Ouvrable ou non
  */
 bool canopen(const String &filename)
 {
-  return filename.endsWith(".txt");
+  return filename.endsWith(".txt") || filename.endsWith("/");
 }
-/*
- *Function:   refresh_screen_SCAN
- *--------------------------
- *Raffraichi l'écran ;mode:SCAN à l'aide de la librairies Jpegdec
+/**
+ * @brief Raffraichi l'écran ;mode:SCAN à l'aide de la librairie Jpegdec.
  *
- *path: Répèretoire parent des image à afficher
- *
- *start: index de la première image
- *
- *returns: void
+ * @param path Répertoire parent des images à afficher
+ * @param start Index de la première image
+ * @return int Dernier index affiché
  */
 int refresh_screen_SCAN(String path, const int &start)
 {
@@ -446,18 +451,13 @@ int refresh_screen_SCAN(String path, const int &start)
   }
   return i + start;
 }
-/*
- *Function:   refresh_screen_FS
- *--------------------------
- *Raffraichi l'écran ;mode:FS à l'aide de mes fonctions
+/**
+ * @brief Raffraichi l'écran ;mode:FS à l'aide de mes fonctions.
  *
- *selected: index de l'élement sélectionner
- *
- *n: nombre de fichier à afficher
- *
- *offset: index du début des informations des fichier
- *
- *returns: void
+ * @param selected Index de l'élément sélectionné
+ * @param n Nombre de fichiers à afficher
+ * @param offset Index du début des informations des fichiers
+ * @return void
  */
 void refresh_screen_FS(const int &selected, const int &n, const int &offset)
 {
@@ -483,18 +483,15 @@ void refresh_screen_FS(const int &selected, const int &n, const int &offset)
   }
   drawselect(n);
 }
-/*
- *Function:   refresh_screen_OPTION
- *--------------------------
- *Raffraichi l'écran ;mode:OPTION à l'aide de mes fonctions
+
+/**
+ * @brief Raffraichi l'écran ;mode:OPTION à l'aide de mes fonctions.
  *
- *type: troi bit contenat les options afficher
- *
- *selected: index de l'option sélectionner
- *
- *returns: void
+ * @param type Trois bits contenant les options à afficher
+ * @param selected Index de l'option sélectionnée
+ * @return void
  */
-void refresh_screen_OPTION(const int &type, const int &selected)
+void refresh_screen_OPTION(const int &type, const int16_t &selected)
 {
 #ifdef DEBUG
   Serial.print("[DEBUG] refresh_screen_OPTION(");
@@ -502,7 +499,112 @@ void refresh_screen_OPTION(const int &type, const int &selected)
   Serial.print(", ");
   Serial.print(selected);
   Serial.println(")");
+  Serial.print("Previous count: ");
+  Serial.println(type >> 5);
+  Serial.print("Can open: ");
+  Serial.println((type & (1 << 1)) >> 1);
+  Serial.print("flc: ");
+  Serial.print((type & (1 << 0)) >> 0);
+  Serial.println((type & (1 << 2)) >> 2);
+  Serial.print("Selected: ");
+  Serial.println(selected);
 #endif
-  // claer
-  //  tft.drawRect
+
+  fillRect(0, 0, 240, 45, TFT_BLACK);
+  fillRect(0, 240, 240, 80, TFT_BLACK);
+  if ((type & (1 << 0)) >> 0)
+  {
+    printflc('↲', 20, 10);
+  }
+  if ((type & (1 << 1)) >> 1)
+  {
+    println("Open", 90, 15);
+  }
+  if ((type & (1 << 2)) >> 2)
+  {
+    printflc('↳', 200, 10);
+  }
+  println("Delete", 10, 255);
+  println("Back", 10, 290);
+
+  switch (selected)
+  {
+  case 0:
+    drawRect(0, 0, 58, 45, TFT_WHITE);
+    break;
+  case 1:
+    drawRect(59, 0, 122, 45, TFT_WHITE);
+    break;
+  case 2:
+    drawRect(182, 0, 58, 45, TFT_WHITE);
+    break;
+  case 3:
+    drawRect(0, 240, 240, 39, TFT_WHITE);
+    break;
+  case 4:
+    drawRect(0, 280, 240, 40, TFT_WHITE);
+    break;
+  default:
+    drawRect(0, 280, 240, 40, TFT_WHITE);
+    break;
+  }
+}
+
+/**
+ * @brief Ouvre un fichier ou un dossier.
+ *
+ * @param i Index du fichier ou du dossier à ouvrir
+ *
+ * @return void
+ */
+void open_file(const int &i)
+{
+#ifdef DEBUG
+  Serial.print("[DEBUG] open_file(");
+  Serial.print(i);
+  Serial.println(")");
+#endif
+  mode = FILE_SYSTEM;
+  if (files[i].type)
+  {
+    clear_screen();
+    if ((i) == 0 && directory != "/")
+    {
+      uint8_t i;
+      for (i = directory.length() - 1; i >= 0 && directory.charAt(i) != '/'; i--)
+        ;
+      directory = directory.substring(0, maximum(i, 1));
+      return;
+    }
+    else
+    {
+      if (!directory.endsWith("/"))
+        directory += "/";
+      directory += files[i].name;
+      count = 0;
+      if (calcdirectory(directory.c_str()) == -1)
+      {
+        mode = SCAN;
+        return;
+      }
+      else
+      {
+        mode = FILE_SYSTEM;
+        return;
+      }
+    }
+  }
+  else
+  {
+    clear_screen();
+    File file = SD.open(directory + files[i].name);
+    if (file)
+    {
+      char buffer[64];
+      file.readBytes(buffer, 64);
+      println(buffer);
+    }
+    file.close();
+    delay(2000);
+  }
 }
