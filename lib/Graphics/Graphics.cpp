@@ -41,18 +41,13 @@ uint8_t (*_coos)[2] = nullptr;
 uint8_t (*_colors)[3] = nullptr;
 File_essantial *_files = nullptr;
 
-/*
- *Function: begin
- *--------------------------
- *Setup variable
+/**
+ * @brief Setup variables
  *
- * coos_: pointeur de la matrix coo points
- *
- * colors_: pointeur de la matrix des couleurs
- *
- * files_: pointeur de la liste des fichiers
- *
- * returns: void
+ * @param coos Pointeur vers la matrice des coordonnées.
+ * @param colors Pointeur vers la matrice des couleurs.
+ * @param files Pointeur vers la liste des fichiers.
+ * @return void
  */
 void begin(uint8_t coos[16][2], uint8_t colors[0][3], File_essantial files[255])
 {
@@ -86,31 +81,44 @@ bool test()
   return true;
 }
 
-/*
- *Function: clear_screen
- *--------------------------
- *Rempli l'écran de noir
+/**
+ * @brief Remplit l'écran de noir.
  *
- *returns: void
+ * @return void
  */
 void clear_screen()
 {
   tft.fillScreen(0);
 }
 
+// add some tft function for the main scipt
+
 size_t println(const char *str)
 {
   return tft.println(str);
 }
 
-/*
- *Function:   drawsepar
- *--------------------------
- *Dessine une ligne entre les fichier
+size_t println(const char *str, int16_t x, int16_t y)
+{
+  tft.setCursor(x, y);
+  return tft.println(str);
+}
+
+void drawRect(int32_t x, int32_t y, int32_t w, int32_t h, uint32_t color)
+{
+  return tft.drawRect(x, y, w, h, color);
+}
+
+void fillRect(int32_t x, int32_t y, int32_t w, int32_t h, uint32_t color)
+{
+  return tft.fillRect(x, y, w, h, color);
+}
+
+/**
+ * @brief Dessine une ligne entre les fichiers.
  *
- *i: index de l'endroit où il doit être
- *
- *returns: void
+ * @param i Index de l'endroit où il doit être.
+ * @return void
  */
 void drawsepar(const int &i)
 {
@@ -127,14 +135,11 @@ void drawsepar(const int &i)
   tft.drawFastHLine(5, 30 + i * 25, tft.width() - 10, TFT_WHITE);
 }
 
-/*
- *Function:   drawdir
- *--------------------------
- *Dessine le logo d'un dossier
+/**
+ * @brief Dessine le logo d'un dossier.
  *
- *i: index de l'endroit où il doit être
- *
- *returns: void
+ * @param i Index de l'endroit où il doit être.
+ * @return void
  */
 void drawdir(const int &i)
 {
@@ -151,14 +156,12 @@ void drawdir(const int &i)
   tft.fillRoundRect(_coos[0][0], _coos[0][1] + i * 25, _coos[1][0], _coos[1][1], 3, tft.color565(200, 200, 50));
   tft.fillRoundRect(_coos[2][0], _coos[2][1] + i * 25, _coos[3][0], _coos[3][1], 3, tft.color565(200, 200, 50));
 }
-/*
- *Function:   drawfile
- *--------------------------
- *Dessine le logo d'un fichier
+
+/**
+ * @brief Dessine le logo d'un fichier.
  *
- *i: index de l'endroit où il doit être
- *
- *returns: void
+ * @param i Index de l'endroit où il doit être.
+ * @return void
  */
 void drawfile(const int &i)
 {
@@ -177,16 +180,12 @@ void drawfile(const int &i)
   tft.fillTriangle(19, 9 + i * 25, 19, 14 + i * 25, 24, 14 + i * 25, TFT_WHITE);
 }
 
-/*
- *Function:   writename
- *--------------------------
- *Ecrit le nom d'un fichier
+/**
+ * @brief Écrit le nom d'un fichier.
  *
- *i_screen: index de l'endroit où il doit être
- *
- *i_file: index du fichier
- *
- *returns: void
+ * @param i_screen Index de l'endroit où il doit être.
+ * @param i_file Index du fichier.
+ * @return void
  */
 void writename(const int &i_screen, const int &i_file)
 {
@@ -216,14 +215,11 @@ void writename(const int &i_screen, const int &i_file)
   drawsepar(i_screen);
 }
 
-/*
- *Function:   drawselect
- *--------------------------
- *Dessine une boite à cocher
+/**
+ * @brief Dessine une boîte à cocher.
  *
- *max: index maximum des endroits où elles doivent être
- *
- *returns: void
+ * @param max Index maximum des endroits où elles doivent être.
+ * @return void
  */
 void drawselect(const int &max)
 {
@@ -243,14 +239,12 @@ void drawselect(const int &max)
     tft.drawRect(211, 9 + i * 25, 18, 18, 0);
   }
 }
-/*
- *Function:   drawselected
- *--------------------------
- *Dessine un ✔ dans la boite
+
+/**
+ * @brief Dessine un ✔ dans la boîte.
  *
- *i: index de l'endroit où il doit être
- *
- *returns: void
+ * @param i Index de l'endroit où il doit être.
+ * @return void
  */
 void drawselected(const int &i)
 {
@@ -268,12 +262,11 @@ void drawselected(const int &i)
   tft.drawLine(219, 24 + i * 25, 224, 15 + i * 25, TFT_WHITE);
 }
 
-/*
- *Function:   printflc
- *--------------------------
- *Affiche une fléche (↰↱↲↳)
+/**
+ * @brief Affiche une flèche (↰↱↲↳).
  *
- * c: caractère de la fléche
+ * @param c Caractère de la flèche.
+ * @return void
  */
 void printflc(const int &c)
 {
@@ -310,6 +303,46 @@ void printflc(const int &c)
   }
   tft.setCursor(x + 8 * s, y);
 }
+
+/**
+ * @brief Affiche une flèche (↰↱↲↳) à une position spécifique.
+ * 
+ * @overload
+ */
+void printflc(const int & c, int16_t x, int16_t y)
+{
+#ifdef DEBUG
+  Serial.print("[DEBUG] printflc(");
+  Serial.print(c);
+  Serial.println(")");
+#endif
+  if (c < 0xE286B0 || c > 0xE286B3)
+  {
+    Serial.println(F("ERROR: printflc: Invalid character code"));
+    return;
+  }
+  const unsigned char *chr = chrtbl_flc[c - 0xE286B0];
+  uint8_t s = tft.textsize;
+  for (int row = 0; row < 16; row++)
+  {
+    unsigned char data = pgm_read_byte(chr + row);
+    for (uint8_t col = 0; col < 8; col++)
+    {
+      if (data & (0x80 >> col))
+      {
+        for (uint8_t i = 0; i < s; i++)
+        {
+          for (uint8_t j = 0; j < s; j++)
+          {
+            tft.drawPixel(x + col * s + i, y + row * s + j, TFT_WHITE);
+          }
+        }
+      }
+    }
+  }
+  tft.setCursor(x + 8 * s, y);
+}
+
 //====================================================================================
 //   Decode and render the Jpeg image onto the TFT screen
 //====================================================================================
@@ -397,6 +430,7 @@ void jpegRender(const int &xpos, const int &ypos)
   Serial.println("=====================================");
 #endif
 }
+
 //====================================================================================
 //   Opens the image file and prime the Jpeg decoder
 //====================================================================================
